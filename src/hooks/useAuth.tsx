@@ -45,17 +45,31 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
                 if (session?.user) {
                     try {
                         // If there's a user, fetch their roles.
-                        const { data: roles } = await supabase
+                        const { data: roles, error: rolesError } = await supabase
                             .from('user_roles')
                             .select('role')
                             .eq('user_id', session.user.id);
 
-                        const userRoles = roles?.map(r => r.role) || [];
-                        setUser({ ...session.user, roles: userRoles });
+                        if (rolesError) {
+                            console.error("Error fetching user roles:", rolesError);
+                            // If user has no roles, assign 'user' role by default
+                            const { error: insertError } = await supabase
+                                .from('user_roles')
+                                .insert({ user_id: session.user.id, role: 'user' });
+                            
+                            if (insertError) {
+                                console.error("Error creating user role:", insertError);
+                            }
+                            
+                            setUser({ ...session.user, roles: ['user'] });
+                        } else {
+                            const userRoles = roles?.map(r => r.role) || ['user'];
+                            setUser({ ...session.user, roles: userRoles });
+                        }
                     } catch (error) {
-                        console.error("Error fetching user roles:", error);
-                        // In case of error, still set the user but with empty roles.
-                        setUser({ ...session.user, roles: [] });
+                        console.error("Error in auth flow:", error);
+                        // In case of error, still set the user with default 'user' role.
+                        setUser({ ...session.user, roles: ['user'] });
                     } finally {
                         // ALWAYS set loading to false after we're done.
                         setIsLoading(false);
