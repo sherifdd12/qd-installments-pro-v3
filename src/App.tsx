@@ -29,6 +29,7 @@ const App = () => (
         <AuthProvider>
           <Routes>
             <Route path="/login" element={<LoginPage />} />
+            <Route path="/test" element={<TestConnection />} />
             <Route element={<AuthLayout />}>
               <Route element={<MainLayout />}>
                 <Route path="/" element={<Navigate to="/dashboard" replace />} />
@@ -40,7 +41,6 @@ const App = () => (
                 <Route path="/reports" element={<ReportsPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
                 <Route path="/user-management" element={<UserManagementPage />} />
-                <Route path="/test" element={<TestConnection />} />
               </Route>
             </Route>
             <Route path="*" element={<NotFound />} />
