@@ -6,11 +6,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/components/ui/use-toast";
 import { supabase } from "@/lib/supabaseClient";
+import RegisterForm from "@/components/auth/RegisterForm";
 
 const LoginPage = () => {
   const [email, setEmail] = useState("admin@example.com"); // Supabase uses email for login
   const [password, setPassword] = useState("admin123");
   const [isLoading, setIsLoading] = useState(false);
+  const [showRegister, setShowRegister] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -39,6 +41,17 @@ const LoginPage = () => {
 
     setIsLoading(false);
   };
+
+  if (showRegister) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-background">
+        <RegisterForm 
+          onSuccess={() => setShowRegister(false)}
+          onSwitchToLogin={() => setShowRegister(false)}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-background">
@@ -74,9 +87,17 @@ const LoginPage = () => {
               />
             </div>
           </CardContent>
-          <CardFooter>
+          <CardFooter className="flex flex-col gap-2">
             <Button type="submit" className="w-full" disabled={isLoading}>
               {isLoading ? "جاري تسجيل الدخول..." : "تسجيل الدخول"}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full"
+              onClick={() => setShowRegister(true)}
+            >
+              إنشاء حساب جديد
             </Button>
           </CardFooter>
         </form>

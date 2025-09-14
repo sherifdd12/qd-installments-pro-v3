@@ -14,6 +14,7 @@ import PaymentsPage from "@/pages/PaymentsPage";
 import DataImportPage from "@/pages/DataImportPage";
 import ReportsPage from "@/pages/ReportsPage";
 import SettingsPage from "@/pages/SettingsPage";
+import UserManagementPage from "@/pages/UserManagementPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -37,6 +38,7 @@ const App = () => (
                 <Route path="/import" element={<DataImportPage />} />
                 <Route path="/reports" element={<ReportsPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
+                <Route path="/user-management" element={<UserManagementPage />} />
               </Route>
             </Route>
             <Route path="*" element={<NotFound />} />
