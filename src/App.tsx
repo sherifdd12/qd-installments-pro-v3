@@ -15,6 +15,7 @@ import DataImportPage from "@/pages/DataImportPage";
 import ReportsPage from "@/pages/ReportsPage";
 import SettingsPage from "@/pages/SettingsPage";
 import UserManagementPage from "@/pages/UserManagementPage";
+import TestConnection from "@/pages/TestConnection";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -39,6 +40,7 @@ const App = () => (
                 <Route path="/reports" element={<ReportsPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
                 <Route path="/user-management" element={<UserManagementPage />} />
+                <Route path="/test" element={<TestConnection />} />
               </Route>
             </Route>
             <Route path="*" element={<NotFound />} />
