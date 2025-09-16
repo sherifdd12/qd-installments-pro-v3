@@ -100,20 +100,18 @@ const DataImportPage = () => {
       
       return importExcelData(file, selectedSheet, selectedTable, mapping);
     },
+    onError: (error) => {
+      toast({
+        title: "فشل الاستيراد",
+        description: error.message,
+      });
+    },
     onSuccess: (result) => {
       toast({
         title: "تم الاستيراد بنجاح",
         description: `تم استيراد ${result.successCount} صف من البيانات${result.failedRows.length > 0 ? ` وفشل ${result.failedRows.length} صفوف` : ''}.`,
       });
       queryClient.invalidateQueries({ queryKey: [selectedTable] });
-      resetForm();
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "حدث خطأ",
-        description: error.message,
-        variant: "destructive",
-      });
     },
   });
 

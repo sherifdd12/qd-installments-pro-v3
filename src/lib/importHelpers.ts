@@ -141,7 +141,7 @@ export const importData = async (
                 case 'number_of_installments':
                   newRow[dbField] = value ? parseInt(value, 10) : null;
                   if (isNaN(newRow[dbField])) {
-                    throw new Error(`قيمة غير صحيحة للحقل "${excelField}" في السطر ${index + 1}`);
+                    throw new Error(`Invalid value for field "${excelField}" in row ${index + 1}`);
                   }
                   break;
                 
@@ -165,6 +165,11 @@ export const importData = async (
                   } catch {
                     throw new Error(`تاريخ غير صحيح في الحقل "${excelField}" في السطر ${index + 1}`);
                   }
+                  break;
+
+                case 'mobile_number':
+                case 'mobile_number2':
+                  newRow[dbField] = value ? value.toString() : null;
                   break;
 
                 default:
