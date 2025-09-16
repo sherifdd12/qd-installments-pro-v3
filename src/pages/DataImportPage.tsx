@@ -138,6 +138,8 @@ const DataImportPage = () => {
           description: error.message, 
           variant: "destructive" 
         });
+      } finally {
+        // Add any cleanup or final actions here if needed
       }
     }
   };
