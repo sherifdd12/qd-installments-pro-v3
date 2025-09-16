@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
+import * as XLSX from 'xlsx';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/components/ui/use-toast';
@@ -8,8 +9,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DeleteDataDialog } from "@/components/data/DeleteDataDialog";
-import { EXCEL_MAPPINGS } from '@/lib/excelImport';
-import * as XLSX from 'xlsx';
+import { importExcelData, readExcelFile } from '@/lib/excelImport';
+import { config } from '@/lib/excelSchema';
+import type { TableName, ImportResult } from '@/lib/excelImport';
+import { supabase } from '@/lib/supabaseClient';
 
 interface TableField {
   label: string;
@@ -22,7 +25,7 @@ interface TableConfig {
   requiredFields: string[];
 }
 
-const TABLE_CONFIGS: Record<keyof typeof EXCEL_MAPPINGS, TableConfig> = {
+const TABLE_CONFIGS: Record<TableName, TableConfig> = {
   customers: {
     name: 'العملاء',
     fields: [
@@ -75,52 +78,11 @@ const DataImportPage = () => {
   const queryClient = useQueryClient();
   const [file, setFile] = useState<File | null>(null);
   const [selectedSheet, setSelectedSheet] = useState<string>('');
-  const [selectedTable, setSelectedTable] = useState<keyof typeof EXCEL_MAPPINGS>('customers');
+  const [selectedTable, setSelectedTable] = useState<TableName>('customers');
   const [isImporting, setIsImporting] = useState(false);
   const [sheets, setSheets] = useState<string[]>([]);
   const [preview, setPreview] = useState<PreviewData>({});
   const [mapping, setMapping] = useState<Mapping>({});
-
-  const handleImport = async () => {
-    if (!file || !selectedSheet) {
-      toast({ 
-        title: "خطأ", 
-        description: "يرجى اختيار ملف وورقة عمل", 
-        variant: "destructive" 
-      });
-      return;
-    }
-
-    setIsImporting(true);
-    try {
-      const result = await importExcelData(file, selectedSheet, selectedTable);
-      
-      if (result.success) {
-        toast({ 
-          title: "تم بنجاح", 
-          description: result.message 
-        });
-        queryClient.invalidateQueries({ queryKey: [selectedTable] });
-        // Reset form
-        setFile(null);
-        setSelectedSheet('');
-      } else {
-        toast({ 
-          title: "خطأ", 
-          description: result.message, 
-          variant: "destructive" 
-        });
-      }
-    } catch (error: any) {
-      toast({ 
-        title: "خطأ", 
-        description: error.message, 
-        variant: "destructive" 
-      });
-    } finally {
-      setIsImporting(false);
-    }
-  };
 
   const resetForm = () => {
     setFile(null);
@@ -130,70 +92,28 @@ const DataImportPage = () => {
     setMapping({});
   };
 
-  interface ImportConfig {
-  file: File;
-  sheet: string;
-  table: keyof typeof EXCEL_MAPPINGS;
-  mappings: Record<string, string>;
-}
-
-const readExcelFile = async (file: File) => {
-  const data = await file.arrayBuffer();
-  const workbook = XLSX.read(data, { type: 'array' });
-  const sheets = workbook.SheetNames;
-  const preview: PreviewData = {};
-  
-  for (const sheet of sheets) {
-    const worksheet = workbook.Sheets[sheet];
-    preview[sheet] = XLSX.utils.sheet_to_json(worksheet);
-  }
-  
-  return { sheets, preview };
-};
-
   const importMutation = useMutation({
-    mutationFn: async (config: ImportConfig) => {
-      try {
-        setIsImporting(true);
-        const data = await file!.arrayBuffer();
-        const workbook = XLSX.read(data, { type: 'array' });
-        const worksheet = workbook.Sheets[selectedSheet];
-        
-        if (!worksheet) {
-          throw new Error(`لم يتم العثور على ورقة العمل "${selectedSheet}"`);
-        }
-
-        const rows = XLSX.utils.sheet_to_json(worksheet) as Record<string, any>[];
-        const mappedRows = rows.map(row => {
-          const newRow: Record<string, any> = {};
-          for (const [sourceField, targetField] of Object.entries(mapping)) {
-            newRow[targetField] = row[sourceField];
-          }
-          return newRow;
-        });
-
-        const { data: result, error } = await supabase
-          .from(selectedTable)
-          .insert(mappedRows);
-
-        if (error) throw error;
-
-        toast({
-          title: "تم الاستيراد بنجاح",
-          description: `تم استيراد ${mappedRows.length} صف من البيانات.`,
-        });
-
-        return result;
-      } catch (error) {
-        toast({
-          title: "حدث خطأ",
-          description: error instanceof Error ? error.message : "حدث خطأ أثناء الاستيراد",
-          variant: "destructive",
-        });
-        throw error;
-      } finally {
-        setIsImporting(false);
+    mutationFn: async () => {
+      if (!file || !selectedSheet) {
+        throw new Error('يرجى اختيار ملف وورقة عمل');
       }
+      
+      return importExcelData(file, selectedSheet, selectedTable, mapping);
+    },
+    onSuccess: (result) => {
+      toast({
+        title: "تم الاستيراد بنجاح",
+        description: `تم استيراد ${result.successCount} صف من البيانات${result.failedRows.length > 0 ? ` وفشل ${result.failedRows.length} صفوف` : ''}.`,
+      });
+      queryClient.invalidateQueries({ queryKey: [selectedTable] });
+      resetForm();
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "حدث خطأ",
+        description: error.message,
+        variant: "destructive",
+      });
     },
   });
 
@@ -203,12 +123,10 @@ const readExcelFile = async (file: File) => {
       setFile(selectedFile);
       setSheets([]);
       setPreview({});
-      setMapping({});    try {
-      const { sheets, preview } = await readExcelFile(selectedFile);
-      setSheets(sheets);
-      setPreview(preview);
+      setMapping({});
+      
       try {
-        const { sheets, preview } = await readExcelFile(file);
+        const { sheets, preview } = await readExcelFile(selectedFile);
         setSheets(sheets);
         setPreview(preview);
         if (sheets.length > 0) {
@@ -216,7 +134,7 @@ const readExcelFile = async (file: File) => {
         }
       } catch (error: any) {
         toast({ 
-          title: "Error reading file", 
+          title: "خطأ في قراءة الملف", 
           description: error.message, 
           variant: "destructive" 
         });
@@ -246,15 +164,6 @@ const readExcelFile = async (file: File) => {
       }
       return newRow;
     });
-  };
-
-  const handleImport = () => {
-    const config: ImportConfig = {
-      tableName: selectedTable,
-      sheetName: selectedSheet,
-      mappings: mapping
-    };
-    mutation.mutate(config);
   };
 
   const mappedData = getMappedData();
@@ -391,10 +300,10 @@ const readExcelFile = async (file: File) => {
                 </div>
                 <div className="flex justify-end">
                   <Button 
-                    onClick={handleImport} 
-                    disabled={mutation.isPending || mappedData.length === 0}
+                    onClick={() => importMutation.mutate()}
+                    disabled={importMutation.isPending || mappedData.length === 0}
                   >
-                    {mutation.isPending ? 'جاري الاستيراد...' : 'استيراد البيانات'}
+                    {importMutation.isPending ? 'جاري الاستيراد...' : 'استيراد البيانات'}
                   </Button>
                 </div>
               </>
