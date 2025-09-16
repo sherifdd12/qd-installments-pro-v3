@@ -1,6 +1,7 @@
 import * as XLSX from 'xlsx';
 import { supabase } from './supabaseClient';
 import { EXCEL_MAPPINGS } from './excelMappings';
+import type { TableName } from './types';
 
 export const TABLE_CONFIGS = {
   customers: {
@@ -347,48 +348,4 @@ export const importData = async (
     reader.onerror = (error) => reject(error);
     reader.readAsArrayBuffer(file);
   });
-};
-
-export const TABLE_CONFIGS = {
-  customers: {
-    name: 'العملاء',
-    requiredFields: ['full_name', 'mobile_number'],
-    fields: [
-      { value: 'id', label: 'كود' },
-      { value: 'sequence_number', label: 'م العميل' },
-      { value: 'full_name', label: 'الاسم الكامل' },
-      { value: 'mobile_number', label: 'رقم الهاتف' },
-      { value: 'mobile_number2', label: 'رقم الهاتف 2' },
-      { value: 'civil_id', label: 'الرقم المدني' }
-    ]
-  },
-  transactions: {
-    name: 'المعاملات',
-    requiredFields: ['customer_id', 'cost_price', 'extra_price', 'installment_amount', 'start_date'],
-    fields: [
-      { value: 'sequence_number', label: 'رقم البيع' },
-      { value: 'customer_id', label: 'رقم العميل' },
-      { value: 'cost_price', label: 'سعر السلعة' },
-      { value: 'extra_price', label: 'السعر الاضافى' },
-      { value: 'amount', label: 'إجمالي السعر' },
-      { value: 'installment_amount', label: 'قيمة القسط' },
-      { value: 'number_of_installments', label: 'عدد الدفعات' },
-      { value: 'start_date', label: 'تاريخ البدء' },
-      { value: 'notes', label: 'ملاحظات' },
-      { value: 'status', label: 'الحالة', defaultValue: 'active' },
-      { value: 'has_legal_case', label: 'قضية قانونية', defaultValue: false }
-    ]
-  },
-  payments: {
-    name: 'المدفوعات',
-    requiredFields: ['transaction_id', 'customer_id', 'amount', 'payment_date'],
-    fields: [
-      { value: 'transaction_id', label: 'معرف المعاملة' },
-      { value: 'customer_id', label: 'معرف العميل' },
-      { value: 'amount', label: 'المبلغ' },
-      { value: 'payment_date', label: 'تاريخ الدفع' },
-      { value: 'notes', label: 'ملاحظات' }
-    ]
-  },
-
 };
