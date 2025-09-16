@@ -38,16 +38,56 @@ export interface ChatbotResponse {
 }
 
 export interface Customer {
-  id: string;
-  sequence_number: string;
+  id: number;
   full_name: string;
   mobile_number: string;
-  alternate_phone?: string;
+  mobile_number2?: string;
   civil_id?: string;
-  created_at: Date;
+  created_at: string;
 }
 
 export interface Transaction {
+  id: number;
+  customer_id: number;
+  amount: number;
+  cost_price: number;
+  profit: number;
+  installment_amount: number;
+  start_date: string;
+  number_of_installments: number;
+  remaining_balance: number;
+  status: string;
+  has_legal_case: boolean;
+  legal_case_details?: string;
+  notes?: string;
+  created_at: string;
+}
+
+export interface Payment {
+  id: string;
+  transaction_id: number;
+  customer_id: number;
+  amount: number;
+  payment_date: string;
+  balance_before: number;
+  balance_after: number;
+  notes?: string;
+  created_at: string;
+}
+
+export type TableName = 'customers' | 'transactions' | 'payments';
+
+export interface ImportConfig {
+  tableName: TableName;
+  sheetName: string;
+  mappings: { [key: string]: string };
+}
+
+export interface TableConfig {
+  name: string;
+  requiredFields: string[];
+  mappings: { [key: string]: string };
+}
   id: string;
   sequence_number: string;
   customer_id: string;

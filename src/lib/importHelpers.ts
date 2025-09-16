@@ -1,9 +1,24 @@
 import * as XLSX from 'xlsx';
 import { supabase } from './supabaseClient';
+import { EXCEL_MAPPINGS } from './excelMappings';
 
-
-
-export type TableName = keyof typeof TABLE_CONFIGS;
+export const TABLE_CONFIGS = {
+  customers: {
+    name: 'العملاء',
+    requiredFields: ['id', 'full_name', 'mobile_number'],
+    mappings: EXCEL_MAPPINGS.customers
+  },
+  transactions: {
+    name: 'المعاملات',
+    requiredFields: ['id', 'customer_id', 'amount', 'cost_price', 'installment_amount', 'start_date', 'number_of_installments'],
+    mappings: EXCEL_MAPPINGS.transactions
+  },
+  payments: {
+    name: 'المدفوعات',
+    requiredFields: ['transaction_id', 'customer_id', 'amount', 'payment_date', 'balance_before', 'balance_after'],
+    mappings: EXCEL_MAPPINGS.payments
+  }
+};
 
 export interface ImportConfig {
   tableName: TableName;
@@ -98,6 +113,69 @@ export const importData = async (
           defval: '',
           blankrows: false
         });
+
+        // Process data based on table type
+        const validRows: any[] = [];
+        const errors: string[] = [];
+        const tableConfig = TABLE_CONFIGS[config.tableName];
+
+        for (const [index, row] of jsonData.entries()) {
+          try {
+            const newRow: any = {};
+            
+            // Map fields according to configuration
+            for (const [excelField, dbField] of Object.entries(tableConfig.mappings)) {
+              const value = row[excelField];
+              
+              // Check required fields
+              if (tableConfig.requiredFields.includes(dbField) && !value) {
+                throw new Error(`الحقل "${excelField}" مطلوب في السطر ${index + 1}`);
+              }
+
+              // Convert types based on field
+              switch (dbField) {
+                case 'id':
+                case 'customer_id':
+                case 'transaction_id':
+                case 'number_of_installments':
+                  newRow[dbField] = value ? parseInt(value, 10) : null;
+                  if (isNaN(newRow[dbField])) {
+                    throw new Error(`قيمة غير صحيحة للحقل "${excelField}" في السطر ${index + 1}`);
+                  }
+                  break;
+                
+                case 'amount':
+                case 'cost_price':
+                case 'installment_amount':
+                case 'balance_before':
+                case 'balance_after':
+                  newRow[dbField] = value ? parseFloat(value) : null;
+                  if (isNaN(newRow[dbField])) {
+                    throw new Error(`قيمة غير صحيحة للحقل "${excelField}" في السطر ${index + 1}`);
+                  }
+                  break;
+
+                case 'start_date':
+                case 'payment_date':
+                  try {
+                    const date = new Date(value);
+                    if (isNaN(date.getTime())) throw new Error();
+                    newRow[dbField] = date.toISOString().split('T')[0];
+                  } catch {
+                    throw new Error(`تاريخ غير صحيح في الحقل "${excelField}" في السطر ${index + 1}`);
+                  }
+                  break;
+
+                default:
+                  newRow[dbField] = value;
+              }
+            }
+
+            validRows.push(newRow);
+          } catch (error: any) {
+            errors.push(error.message);
+          }
+        }
 
         if (config.tableName === 'transactions') {
           // For transactions, we need to lookup customer_id from sequence_number

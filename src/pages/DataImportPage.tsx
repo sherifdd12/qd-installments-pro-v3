@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -8,33 +8,119 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DeleteDataDialog } from "@/components/data/DeleteDataDialog";
-import { readExcelFile, importData, deleteImportedData, TABLE_CONFIGS, ImportConfig } from '@/lib/importHelpers';
+import { EXCEL_MAPPINGS } from '@/lib/excelImport';
+import * as XLSX from 'xlsx';
+
+interface TableField {
+  label: string;
+  value: string;
+}
+
+interface TableConfig {
+  name: string;
+  fields: TableField[];
+  requiredFields: string[];
+}
+
+const TABLE_CONFIGS: Record<keyof typeof EXCEL_MAPPINGS, TableConfig> = {
+  customers: {
+    name: 'العملاء',
+    fields: [
+      { label: 'الكود', value: 'id' },
+      { label: 'الاسم', value: 'full_name' },
+      { label: 'رقم الموبايل', value: 'mobile_number' },
+      { label: 'رقم الموبايل 2', value: 'mobile_number2' },
+    ],
+    requiredFields: ['id', 'full_name', 'mobile_number']
+  },
+  transactions: {
+    name: 'المعاملات',
+    fields: [
+      { label: 'رقم البيع', value: 'id' },
+      { label: 'رقم العميل', value: 'customer_id' },
+      { label: 'سعر السلعة', value: 'cost_price' },
+      { label: 'إجمالي السعر', value: 'amount' },
+      { label: 'عدد الدفعات', value: 'number_of_installments' },
+      { label: 'القسط الشهرى', value: 'installment_amount' },
+      { label: 'تاريخ بدء القرض', value: 'start_date' },
+      { label: 'اتعاب محاماه', value: 'legal_case_details' },
+    ],
+    requiredFields: ['id', 'customer_id', 'amount', 'number_of_installments', 'start_date']
+  },
+  payments: {
+    name: 'الدفعات',
+    fields: [
+      { label: 'رقم العميل', value: 'customer_id' },
+      { label: 'رقم البيع', value: 'transaction_id' },
+      { label: 'قيمة الدفعة', value: 'amount' },
+      { label: 'تاريخ الدفعة', value: 'payment_date' },
+      { label: 'المتبقى', value: 'balance_after' },
+      { label: 'الدين المستحق', value: 'balance_before' },
+      { label: 'ملاحظات', value: 'notes' },
+    ],
+    requiredFields: ['customer_id', 'transaction_id', 'amount', 'payment_date']
+  }
+};
+
+interface PreviewData {
+  [sheet: string]: Record<string, any>[];
+}
+
+interface Mapping {
+  [sourceField: string]: string;
+}
 
 const DataImportPage = () => {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [file, setFile] = useState<File | null>(null);
-  const [sheets, setSheets] = useState<string[]>([]);
-
-  const [preview, setPreview] = useState<{ [sheet: string]: any[] }>({});
   const [selectedSheet, setSelectedSheet] = useState<string>('');
-  const [selectedTable, setSelectedTable] = useState<keyof typeof TABLE_CONFIGS>('customers');
-  const [mapping, setMapping] = useState<{ [key: string]: string }>({});
+  const [selectedTable, setSelectedTable] = useState<keyof typeof EXCEL_MAPPINGS>('customers');
+  const [isImporting, setIsImporting] = useState(false);
+  const [sheets, setSheets] = useState<string[]>([]);
+  const [preview, setPreview] = useState<PreviewData>({});
+  const [mapping, setMapping] = useState<Mapping>({});
 
-  const mutation = useMutation({
-    mutationFn: async (config: ImportConfig) => {
-      if (!file) throw new Error('No file selected');
-      return importData(file, config);
-    },
-    onSuccess: (data: any) => {
-      toast({ title: "Success", description: data.message });
-      queryClient.invalidateQueries({ queryKey: [selectedTable, 'dashboardStats'] });
-      resetForm();
-    },
-    onError: (error: any) => {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    },
-  });
+  const handleImport = async () => {
+    if (!file || !selectedSheet) {
+      toast({ 
+        title: "خطأ", 
+        description: "يرجى اختيار ملف وورقة عمل", 
+        variant: "destructive" 
+      });
+      return;
+    }
+
+    setIsImporting(true);
+    try {
+      const result = await importExcelData(file, selectedSheet, selectedTable);
+      
+      if (result.success) {
+        toast({ 
+          title: "تم بنجاح", 
+          description: result.message 
+        });
+        queryClient.invalidateQueries({ queryKey: [selectedTable] });
+        // Reset form
+        setFile(null);
+        setSelectedSheet('');
+      } else {
+        toast({ 
+          title: "خطأ", 
+          description: result.message, 
+          variant: "destructive" 
+        });
+      }
+    } catch (error: any) {
+      toast({ 
+        title: "خطأ", 
+        description: error.message, 
+        variant: "destructive" 
+      });
+    } finally {
+      setIsImporting(false);
+    }
+  };
 
   const resetForm = () => {
     setFile(null);
@@ -44,10 +130,83 @@ const DataImportPage = () => {
     setMapping({});
   };
 
+  interface ImportConfig {
+  file: File;
+  sheet: string;
+  table: keyof typeof EXCEL_MAPPINGS;
+  mappings: Record<string, string>;
+}
+
+const readExcelFile = async (file: File) => {
+  const data = await file.arrayBuffer();
+  const workbook = XLSX.read(data, { type: 'array' });
+  const sheets = workbook.SheetNames;
+  const preview: PreviewData = {};
+  
+  for (const sheet of sheets) {
+    const worksheet = workbook.Sheets[sheet];
+    preview[sheet] = XLSX.utils.sheet_to_json(worksheet);
+  }
+  
+  return { sheets, preview };
+};
+
+  const importMutation = useMutation({
+    mutationFn: async (config: ImportConfig) => {
+      try {
+        setIsImporting(true);
+        const data = await file!.arrayBuffer();
+        const workbook = XLSX.read(data, { type: 'array' });
+        const worksheet = workbook.Sheets[selectedSheet];
+        
+        if (!worksheet) {
+          throw new Error(`لم يتم العثور على ورقة العمل "${selectedSheet}"`);
+        }
+
+        const rows = XLSX.utils.sheet_to_json(worksheet) as Record<string, any>[];
+        const mappedRows = rows.map(row => {
+          const newRow: Record<string, any> = {};
+          for (const [sourceField, targetField] of Object.entries(mapping)) {
+            newRow[targetField] = row[sourceField];
+          }
+          return newRow;
+        });
+
+        const { data: result, error } = await supabase
+          .from(selectedTable)
+          .insert(mappedRows);
+
+        if (error) throw error;
+
+        toast({
+          title: "تم الاستيراد بنجاح",
+          description: `تم استيراد ${mappedRows.length} صف من البيانات.`,
+        });
+
+        return result;
+      } catch (error) {
+        toast({
+          title: "حدث خطأ",
+          description: error instanceof Error ? error.message : "حدث خطأ أثناء الاستيراد",
+          variant: "destructive",
+        });
+        throw error;
+      } finally {
+        setIsImporting(false);
+      }
+    },
+  });
+
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) {
-      const file = e.target.files[0];
-      setFile(file);
+    const selectedFile = e.target.files?.[0];
+    if (selectedFile) {
+      setFile(selectedFile);
+      setSheets([]);
+      setPreview({});
+      setMapping({});    try {
+      const { sheets, preview } = await readExcelFile(selectedFile);
+      setSheets(sheets);
+      setPreview(preview);
       try {
         const { sheets, preview } = await readExcelFile(file);
         setSheets(sheets);
