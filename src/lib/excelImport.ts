@@ -216,7 +216,16 @@ export const importExcelData = async (
             };
 
             for (const [source, target] of Object.entries(mappings)) {
-              if (row[source] === undefined) continue;
+              if (row[source] === undefined || row[source] === null) continue;
+
+              // Pre-process and clean phone numbers before validation
+              if (target === 'mobile_number' || target === 'mobile_number2') {
+                const rawPhone = String(row[source]);
+                // Remove all non-digit characters, allowing for a leading '+'
+                const cleanedPhone = rawPhone.replace(/[^\d+]/g, '');
+                mappedRow[target] = cleanedPhone;
+                continue;
+              }
 
               switch (target) {
                 case 'id':
