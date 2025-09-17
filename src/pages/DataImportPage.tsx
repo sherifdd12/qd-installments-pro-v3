@@ -101,9 +101,10 @@ const DataImportPage = () => {
       return importExcelData(file, selectedSheet, selectedTable, mapping);
     },
     onError: (error) => {
+      const errorMessage = error?.message || 'حدث خطأ غير متوقع';
       toast({
         title: "فشل الاستيراد",
-        description: error.message,
+        description: errorMessage,
       });
     },
     onSuccess: (result) => {
