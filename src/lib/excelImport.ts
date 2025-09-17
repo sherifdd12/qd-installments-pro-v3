@@ -152,29 +152,43 @@ export const importExcelData = async (
             mappedRow.has_legal_case = Boolean(mappedRow.legal_case_details);
           }
 
-          const validatedRow = tableConfig.schema.parse(mappedRow);
-          processedRows.push(validatedRow);
-
+          try {
+            const validatedRow = tableConfig.schema.parse(mappedRow);
+            processedRows.push(validatedRow);
+          } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'بيانات غير صالحة';
+            console.error(`Row ${i + index + 2} failed validation: ${errorMessage}`);
+            result.failedRows.push({
+              row: i + index + 2,
+              errors: [errorMessage],
+            });
+          }
         } catch (error) {
+          console.error(`Unexpected error processing row ${i + index + 2}: ${error.message}`);
           result.failedRows.push({
             row: i + index + 2,
-            errors: error instanceof Error ? [error.message] : ['بيانات غير صالحة'],
+            errors: ['خطأ غير متوقع'],
           });
         }
       }
 
       if (processedRows.length > 0) {
-        const { error } = await supabase
-          .from(tableName)
-          .insert(processedRows);
+        try {
+          const { error } = await supabase
+            .from(tableName)
+            .insert(processedRows);
 
-        if (error) {
-          result.failedRows.push(...processedRows.map((_, index) => ({
-            row: i + index + 2,
-            errors: [error.message],
-          })));
-        } else {
-          result.successCount += processedRows.length;
+          if (error) {
+            console.error(`Supabase insertion error: ${error.message}`);
+            result.failedRows.push(...processedRows.map((_, index) => ({
+              row: i + index + 2,
+              errors: [error.message],
+            })));
+          } else {
+            result.successCount += processedRows.length;
+          }
+        } catch (error) {
+          console.error(`Unexpected error during Supabase insertion: ${error.message}`);
         }
       }
     }
