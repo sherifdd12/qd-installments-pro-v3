@@ -108,53 +108,78 @@ export const importExcelData = async (
 
     const tableConfig = config.tables[tableName];
 
-    for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
-      const chunk = rows.slice(i, i + CHUNK_SIZE);
-      const processedRows: Record<string, any>[] = [];
+    if (tableName === 'transactions') {
+      const { data: customers, error: customerError } = await supabase
+        .from('customers')
+        .select('id, sequence_number');
 
-      for (const [index, row] of chunk.entries()) {
-        try {
-          const mappedRow: Record<string, any> = {
-            created_at: new Date().toISOString(),
-          };
+      if (customerError || !customers) {
+        throw new Error(`فشل في جلب بيانات العملاء للتحقق: ${customerError?.message}`);
+      }
 
-          for (const [source, target] of Object.entries(mappings)) {
-            if (row[source] === undefined) continue;
+      const customerMap = new Map<string, string>();
+      customers.forEach(c => {
+        if (c.sequence_number) {
+          customerMap.set(String(c.sequence_number), c.id);
+        }
+      });
 
-            switch (target) {
-              case 'id':
-              case 'customer_id':
-              case 'transaction_id':
-              case 'number_of_installments':
-                mappedRow[target] = processNumber(row[source]);
-                break;
+      for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
+        const chunk = rows.slice(i, i + CHUNK_SIZE);
+        const processedRows: Record<string, any>[] = [];
 
-              case 'amount':
-              case 'cost_price':
-              case 'installment_amount':
-              case 'balance_before':
-              case 'balance_after':
-                mappedRow[target] = processNumber(row[source]);
-                break;
+        for (const [index, row] of chunk.entries()) {
+          try {
+            const mappedRow: Record<string, any> = {
+              created_at: new Date().toISOString(),
+            };
 
-              case 'start_date':
-              case 'payment_date':
-                mappedRow[target] = processDate(row[source]);
-                break;
+            let customerSequenceNumber: string | null = null;
 
-              default:
-                mappedRow[target] = row[source];
+            for (const [source, target] of Object.entries(mappings)) {
+              if (row[source] === undefined || row[source] === null) continue;
+              
+              if (target === 'customer_id') {
+                customerSequenceNumber = String(row[source]);
+                continue; 
+              }
+
+              switch (target) {
+                case 'id':
+                case 'transaction_id':
+                case 'number_of_installments':
+                  mappedRow[target] = processNumber(row[source]);
+                  break;
+                case 'amount':
+                case 'cost_price':
+                case 'installment_amount':
+                case 'balance_before':
+                case 'balance_after':
+                  mappedRow[target] = processNumber(row[source]);
+                  break;
+                case 'start_date':
+                case 'payment_date':
+                  mappedRow[target] = processDate(row[source]);
+                  break;
+                default:
+                  mappedRow[target] = row[source];
+              }
             }
-          }
+            
+            if (customerSequenceNumber) {
+              const customerId = customerMap.get(customerSequenceNumber);
+              if (!customerId) {
+                throw new Error(`لم يتم العثور على عميل بالرقم التسلسلي: ${customerSequenceNumber}`);
+              }
+              mappedRow['customer_id'] = customerId;
+            }
 
-          if (tableName === 'transactions') {
             mappedRow.status = 'active';
             mappedRow.has_legal_case = Boolean(mappedRow.legal_case_details);
-          }
-
-          try {
+            
             const validatedRow = tableConfig.schema.parse(mappedRow);
             processedRows.push(validatedRow);
+
           } catch (error) {
             const errorMessage = error instanceof Error ? error.message : 'بيانات غير صالحة';
             console.error(`Row ${i + index + 2} failed validation: ${errorMessage}`);
@@ -163,32 +188,83 @@ export const importExcelData = async (
               errors: [errorMessage],
             });
           }
-        } catch (error) {
-          console.error(`Unexpected error processing row ${i + index + 2}: ${error.message}`);
-          result.failedRows.push({
-            row: i + index + 2,
-            errors: ['خطأ غير متوقع'],
-          });
         }
-      }
 
-      if (processedRows.length > 0) {
-        try {
-          const { error } = await supabase
-            .from(tableName)
-            .insert(processedRows);
-
+        if (processedRows.length > 0) {
+          const { error } = await supabase.from(tableName).insert(processedRows);
           if (error) {
             console.error(`Supabase insertion error: ${error.message}`);
-            result.failedRows.push(...processedRows.map((_, index) => ({
-              row: i + index + 2,
+            result.failedRows.push(...processedRows.map((_, rowIndex) => ({
+              row: i + rowIndex + 2,
               errors: [error.message],
             })));
           } else {
             result.successCount += processedRows.length;
           }
-        } catch (error) {
-          console.error(`Unexpected error during Supabase insertion: ${error.message}`);
+        }
+      }
+    } else {
+      // Original logic for other tables
+      for (let i = 0; i < rows.length; i += CHUNK_SIZE) {
+        const chunk = rows.slice(i, i + CHUNK_SIZE);
+        const processedRows: Record<string, any>[] = [];
+
+        for (const [index, row] of chunk.entries()) {
+          try {
+            const mappedRow: Record<string, any> = {
+              created_at: new Date().toISOString(),
+            };
+
+            for (const [source, target] of Object.entries(mappings)) {
+              if (row[source] === undefined) continue;
+
+              switch (target) {
+                case 'id':
+                case 'customer_id':
+                case 'transaction_id':
+                case 'number_of_installments':
+                  mappedRow[target] = processNumber(row[source]);
+                  break;
+                case 'amount':
+                case 'cost_price':
+                case 'installment_amount':
+                case 'balance_before':
+                case 'balance_after':
+                  mappedRow[target] = processNumber(row[source]);
+                  break;
+                case 'start_date':
+                case 'payment_date':
+                  mappedRow[target] = processDate(row[source]);
+                  break;
+                default:
+                  mappedRow[target] = row[source];
+              }
+            }
+            
+            const validatedRow = tableConfig.schema.parse(mappedRow);
+            processedRows.push(validatedRow);
+
+          } catch (error) {
+            const errorMessage = error instanceof Error ? error.message : 'بيانات غير صالحة';
+            console.error(`Row ${i + index + 2} failed validation: ${errorMessage}`);
+            result.failedRows.push({
+              row: i + index + 2,
+              errors: [errorMessage],
+            });
+          }
+        }
+
+        if (processedRows.length > 0) {
+          const { error } = await supabase.from(tableName).insert(processedRows);
+          if (error) {
+            console.error(`Supabase insertion error: ${error.message}`);
+            result.failedRows.push(...processedRows.map((_, rowIndex) => ({
+              row: i + rowIndex + 2,
+              errors: [error.message],
+            })));
+          } else {
+            result.successCount += processedRows.length;
+          }
         }
       }
     }
