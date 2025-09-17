@@ -66,3 +66,11 @@ export const paymentSchema = z.object({
   balance_before: z.coerce.number().min(0).optional(),
   notes: z.string().optional(),
 });
+
+export const phoneNumberValidation = (phoneNumber: string | undefined): boolean => {
+  if (!phoneNumber) return true; // Allow missing phone numbers
+
+  // Allow phone numbers with 8 or more digits
+  const phoneRegex = /^\d{8,}$/;
+  return phoneRegex.test(phoneNumber);
+};
