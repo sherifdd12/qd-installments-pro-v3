@@ -11,7 +11,7 @@ export const customerSchema = z.object({
   }).min(2, "اسم العميل يجب أن يكون على الأقل حرفين"),
   mobile_number: z.string({
     required_error: "رقم الموبايل مطلوب",
-  }).regex(/^\+?[0-9]{8,15}$/, "رقم الموبايل غير صالح"),
+  }).regex(/^\+?[0-9]{8,15}$/, "رقم الموبايل غير صالح").nullable().optional(),
   mobile_number2: z.string().regex(/^\+?[0-9]{8,15}$/, "رقم الموبايل الثاني غير صالح").nullable().optional(),
 });
 
