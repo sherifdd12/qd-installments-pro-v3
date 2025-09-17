@@ -213,13 +213,20 @@ const getSchemaForTable = (tableName: keyof typeof EXCEL_MAPPINGS) => {
 const preprocessRow = (row: Record<string, any>, tableName: keyof typeof EXCEL_MAPPINGS) => {
   const processed = { ...row };
 
+  // Convert phone numbers to strings if they are numeric
+  if (processed.mobile_number) {
+    processed.mobile_number = String(processed.mobile_number);
+  }
+  if (processed.mobile_number2) {
+    processed.mobile_number2 = String(processed.mobile_number2);
+  }
+
   // Convert dates from Excel serial numbers if needed
   if (tableName === 'transactions' && processed.start_date) {
     try {
       const date = XLSX.SSF.parse_date_code(processed.start_date);
       processed.start_date = new Date(date.y, date.m - 1, date.d).toISOString();
     } catch (error) {
-      // If not a serial number, try parsing as is
       const parsed = new Date(processed.start_date);
       if (!isNaN(parsed.getTime())) {
         processed.start_date = parsed.toISOString();
@@ -232,7 +239,6 @@ const preprocessRow = (row: Record<string, any>, tableName: keyof typeof EXCEL_M
       const date = XLSX.SSF.parse_date_code(processed.payment_date);
       processed.payment_date = new Date(date.y, date.m - 1, date.d).toISOString();
     } catch (error) {
-      // If not a serial number, try parsing as is
       const parsed = new Date(processed.payment_date);
       if (!isNaN(parsed.getTime())) {
         processed.payment_date = parsed.toISOString();
